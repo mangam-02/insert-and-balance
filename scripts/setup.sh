@@ -38,15 +38,15 @@ for pkg in insertion ball_balance; do
 done
 
 echo "==> [3/3] Keeping the submodule working tree clean…"
-EXCLUDE_FILE="$DRIVER_DIR/.git/info/exclude"
-if [ -f "$EXCLUDE_FILE" ]; then
-  for pkg in insertion ball_balance; do
-    grep -qxF "/$pkg" "$EXCLUDE_FILE" || echo "/$pkg" >> "$EXCLUDE_FILE"
-  done
-  echo "    - added links to $DRIVER_DIR/.git/info/exclude"
-else
-  echo "    - submodule has no .git/info/exclude (nested submodule?), skipping"
-fi
+# For a submodule, the real git dir lives under <super>/.git/modules/...,
+# so resolve it instead of assuming a literal .git/ folder.
+GIT_DIR="$(git -C "$DRIVER_DIR" rev-parse --absolute-git-dir)"
+EXCLUDE_FILE="$GIT_DIR/info/exclude"
+mkdir -p "$GIT_DIR/info"
+for pkg in insertion ball_balance; do
+  grep -qxF "/$pkg" "$EXCLUDE_FILE" 2>/dev/null || echo "/$pkg" >> "$EXCLUDE_FILE"
+done
+echo "    - marked links ignored in $EXCLUDE_FILE"
 
 cat <<'EOF'
 
