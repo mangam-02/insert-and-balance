@@ -1,0 +1,65 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ROS 2 / colcon
+build/
+install/
+log/
+*.bag
+*.db3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.installed.cfg
+*.egg
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ML / training artifacts
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.bin
+*.safetensors
+checkpoints/
+outputs/
+runs/
+wandb/
+data/raw/
+datasets/
+
+# OpenVINO exports
+*.xml
+*.mapping
+openvino_model/
+
+# Calibration / recorded data (large, machine-specific)
+*.mp4
+*.avi
+recordings/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs / temp
+*.log
+tmp/
+.cache/
