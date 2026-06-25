@@ -79,6 +79,7 @@ else
         --env "DISPLAY=$DISPLAY" \
         --env "USER=$(id -u)" \
         --env "ROS_DOMAIN_ID=1" \
+        --env "FASTRTPS_DEFAULT_PROFILES_FILE=/host/FoundationPose/docker/fastdds_udp_only.xml" \
         --volume "/tmp/.X11-unix:/tmp/.X11-unix:rw" \
         --volume "/dev:/dev" \
         --volume "$HOME:/host" \
