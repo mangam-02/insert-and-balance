@@ -97,6 +97,10 @@ CallbackReturn CartesianImpedanceController::on_init() {
       "/cartesian_impedance/pose_desired", 1,
       std::bind(&CartesianImpedanceController::desiredCartesianCallback, this, std::placeholders::_1)
     );
+    sub_desired_stiffness_ = get_node()->create_subscription<std_msgs::msg::Float64MultiArray>(
+      "/cartesian_impedance/stiffness", 1,
+      std::bind(&CartesianImpedanceController::desiredStiffnessCallback, this, std::placeholders::_1)
+    );
   } catch (const std::exception& e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;
@@ -159,6 +163,33 @@ void CartesianImpedanceController::desiredCartesianCallback(
     }
 
   }
+}
+
+void CartesianImpedanceController::desiredStiffnessCallback(
+  const std_msgs::msg::Float64MultiArray& msg) {
+  // Expected layout: [k_x, k_y, k_z, k_rx, k_ry, k_rz]
+  if (msg.data.size() < 6) {
+    RCLCPP_WARN(get_node()->get_logger(),
+                "Stiffness message ignored: expected 6 values [x,y,z,rx,ry,rz], got %zu",
+                msg.data.size());
+    return;
+  }
+  Matrix6d new_stiffness = Matrix6d::Zero();
+  Matrix6d new_damping = Matrix6d::Zero();
+  for (int i = 0; i < 6; ++i) {
+    double k = msg.data[i];
+    if (k < 0.0) {
+      RCLCPP_WARN(get_node()->get_logger(),
+                  "Negative stiffness on axis %d ignored, clamping to 0.", i);
+      k = 0.0;
+    }
+    new_stiffness(i, i) = k;
+    // Critical damping; rotational axes keep the 0.8 factor used in on_activate.
+    double damping_factor = (i < 3) ? 1.0 : 0.8;
+    new_damping(i, i) = damping_factor * 2.0 * std::sqrt(k);
+  }
+  stiffness = new_stiffness;
+  damping = new_damping;
 }
 
 }  // namespace franka_example_controllers

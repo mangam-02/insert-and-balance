@@ -1,0 +1,10 @@
+# Returns the latest 6D pose of the tracked object, expressed in the camera
+# optical frame, as produced by the FoundationPose pipeline.
+
+# --- Request ---
+string object_name        # optional; reserved for future multi-object support (ignored for now)
+---
+# --- Response ---
+bool valid                        # true once the object has been registered and is being tracked
+geometry_msgs/PoseStamped pose    # object (mesh-origin) pose in the camera optical frame, meters
+string message                    # human-readable status (e.g. "tracking", "waiting for detection")

@@ -1,0 +1,9 @@
+# Cartesian poses for wrist-camera calibration.
+# Each row = pose of panda_hand_tcp expressed in panda_link0.
+# Columns: name, x, y, z, qx, qy, qz, qw   (position in metres, orientation as quaternion)
+# Aim the wrist camera at the FIXED ChArUco board and vary BOTH position and
+# orientation between poses (>= 8-12 poses, with tilt, give the best hand-eye result).
+# These are placeholder values - replace with poses valid for YOUR board location,
+# or capture them by jogging the robot and reading panda_hand_tcp from TF.
+name,x,y,z,qx,qy,qz,qw
+p00,0.40,0.00,0.50,1.0,0.0,0.0,0.0

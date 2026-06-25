@@ -54,7 +54,9 @@ class CartesianImpedanceController : public controller_interface::ControllerInte
   double n_stiffness;
 
   void desiredCartesianCallback(const std_msgs::msg::Float64MultiArray& msg);
-  rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr sub_desired_cartesian_; 
+  void desiredStiffnessCallback(const std_msgs::msg::Float64MultiArray& msg);
+  rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr sub_desired_cartesian_;
+  rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr sub_desired_stiffness_;
 };
 
 }  // namespace franka_example_controllers

@@ -1,0 +1,39 @@
+# Parameters for the wrist_camera_calibrator node.
+# Edit the topics / frames / board params, then launch via calibration.launch.py.
+/**:
+  ros__parameters:
+    # --- input poses ---
+    poses_csv: ""                     # absolute path to the Cartesian poses CSV (REQUIRED)
+
+    # --- camera (Intel RealSense defaults; verify with: ros2 topic list) ---
+    image_topic: /camera/camera/color/image_raw
+    camera_info_topic: /camera/camera/color/camera_info
+    camera_info_yaml: ""              # optional: load intrinsics from a yaml instead of camera_info
+
+    # --- MoveIt / frames ---
+    # NOTE: arm launched WITHOUT the hand -> use panda_arm / panda_link8.
+    # If you attach the gripper, switch to: panda_manipulator / panda_hand_tcp / panda_hand.
+    planning_group: panda_arm         # plans panda_link0 -> panda_link8
+    base_frame: panda_link0
+    pose_link: panda_link8            # frame the CSV poses are expressed for
+    gripper_frame: panda_link8        # rigid camera-mount frame; result = camera pose in here
+
+    # --- motion ---
+    settle_time: 2.0                  # seconds to wait after each move before capturing
+    vel_scale: 0.1
+    acc_scale: 0.1
+    position_tolerance: 0.005
+    orientation_tolerance: 0.01
+
+    # --- detection / solve ---
+    min_charuco_corners: 6
+    handeye_method: park              # tsai | park | horaud | andreff | daniilidis
+    output_dir: "~/wrist_cam_calibration"
+
+    # --- ChArUco board (keep in sync with charuco_board.yaml / the printout) ---
+    charuco:
+      squares_x: 5
+      squares_y: 7
+      square_length: 0.025
+      marker_length: 0.019
+      dictionary: DICT_5X5_1000

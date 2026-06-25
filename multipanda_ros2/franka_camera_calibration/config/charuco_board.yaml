@@ -1,0 +1,14 @@
+# ChArUco board parameters - MUST match the printed board.
+# Generate the board with:
+#   ros2 run franka_camera_calibration generate_charuco_board
+# After printing, measure a black square with calipers and put the MEASURED
+# square_length / marker_length here (in metres). Calibration accuracy depends
+# directly on these being correct.
+/**:
+  ros__parameters:
+    charuco:
+      squares_x: 5
+      squares_y: 7
+      square_length: 0.04      # metres (40 mm) - UPDATE to measured value
+      marker_length: 0.03      # metres (30 mm) - UPDATE to measured value
+      dictionary: DICT_5X5_1000
