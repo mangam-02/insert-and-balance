@@ -167,6 +167,31 @@ def generate_launch_description():
         parameters=[robot_description],
     )
 
+    # Tool-center-point frame: 15 cm along +Z from the flange (panda_link8)
+    tcp_static_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='tcp_static_tf',
+        output='log',
+        arguments=['--x', '0', '--y', '0', '--z', '0.15',
+                   '--roll', '0', '--pitch', '0', '--yaw', '0',
+                   '--frame-id', 'panda_link8', '--child-frame-id', 'tcp'],
+    )
+
+    # Eye-in-hand wrist-camera extrinsic (from wrist_cam_calibration/run1):
+    # panda_link8 -> camera_optical_frame. This bridges the robot tree to the camera so
+    # FoundationPose's peg/insert poses (published in camera_optical_frame) resolve in panda_link0.
+    camera_static_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='camera_static_tf',
+        output='log',
+        arguments=['--x', '0.00790127', '--y', '-0.08703501', '--z', '0.05698960',
+                   '--qx', '0.00827584', '--qy', '0.30689029',
+                   '--qz', '0.95060955', '--qw', '0.04573117',
+                   '--frame-id', 'panda_link8', '--child-frame-id', 'camera_optical_frame'],
+    )
+
     ros2_controllers_path = os.path.join(
         get_package_share_directory('franka_moveit_config'),
         'config',
@@ -250,6 +275,8 @@ def generate_launch_description():
          db_arg,
          rviz_node,
          robot_state_publisher,
+         tcp_static_tf,
+         camera_static_tf,
          run_move_group_node,
          ros2_control_node,
          mongodb_server_node,

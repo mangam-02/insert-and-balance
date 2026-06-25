@@ -43,3 +43,33 @@ docker exec -it --user developer multipanda-container bash
 
   # Schließen:
   ros2 action send_goal /panda_gripper/move franka_msgs/action/Move "{width: 0.0, speed: 0.1}"
+  
+  
+  
+  
+  
+  
+  # Backup Extrinsics
+  
+developer@minga-09:~/wrist_cam_calibration/run1$ cat ~/wrist_cam_calibration/run1/wrist_camera_extrinsics.yaml
+# Eye-in-hand wrist-camera extrinsics.
+# Transform: camera optical frame expressed in "panda_link8".
+# Method: cv2.calibrateHandEye / park, 6 samples.
+wrist_camera_extrinsics:
+  parent_frame: panda_link8
+  child_frame: camera_optical_frame
+  translation:
+    x: 0.00790127
+    y: -0.08703501
+    z: 0.05698960
+  rotation_quaternion_xyzw:
+    x: 0.00827584
+    y: 0.30689029
+    z: 0.95060955
+    w: 0.04573117
+  consistency_residual: 0.00929430
+# Static TF example:
+#   ros2 run tf2_ros static_transform_publisher 0.007901 -0.087035 0.056990 0.008276 0.306890 0.950610 0.045731 panda_link8 camera_optical_frame
+developer@minga-09:~/wrist_cam_calibration/run1$ 
+
+

@@ -29,6 +29,7 @@ setup(
             'record_poses = franka_camera_calibration.record_poses:main',
             'capture_samples = franka_camera_calibration.capture_samples:main',
             'calibrate_from_captures = franka_camera_calibration.calibrate_from_captures:main',
+            'validate_calibration = franka_camera_calibration.validate_calibration:main',
             'calibrate_wrist_camera = franka_camera_calibration.calibrate_wrist_camera:main',
         ],
     },

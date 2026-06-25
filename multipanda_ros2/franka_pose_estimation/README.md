@@ -17,6 +17,32 @@ srv/GetObjectPose
 `pose` is FoundationPose's raw `ob_in_cam` (the mesh-origin frame expressed in the
 camera optical frame), unchanged from `live_pose.py`.
 
+## Quickstart (end-to-end, GPU + RealSense)
+
+From the host, one command launches the FP container (GPU + camera + both repos
+mounted), installs ROS 2 Humble into it on first run, builds the package, and
+launches the service:
+
+```bash
+cd franka_pose_estimation
+bash docker_run.sh prompt:=nut mesh_file:=demo_data/nut/mesh/nut.obj
+```
+
+Override the FP repo / image / domain via env vars:
+`FOUNDATIONPOSE_DIR`, `FP_IMAGE` (default `foundationpose:live`), `ROS_DOMAIN_ID`.
+
+Then, from another shell *on the same `ROS_DOMAIN_ID`* (host or a second
+`docker exec`):
+
+```bash
+ros2 service call /foundationpose_pose_service/get_object_pose \
+     franka_pose_estimation/srv/GetObjectPose "{}"
+```
+
+`valid: false` until the nut is seen and registered; after that you get the live
+pose in `camera_color_optical_frame`. The sections below explain each step the
+script automates, for when you want to do it by hand or bake it into the image.
+
 ## Why it runs inside the FoundationPose container
 
 FoundationPose needs its GPU stack (torch / nvdiffrast / pytorch3d / pyrealsense2),
