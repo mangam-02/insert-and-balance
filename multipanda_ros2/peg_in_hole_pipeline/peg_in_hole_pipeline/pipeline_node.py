@@ -49,7 +49,7 @@ class PipelineNode(Node):
         # home / motion
         d('joint_names', ['panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4',
                           'panda_joint5', 'panda_joint6', 'panda_joint7'])
-        d('home_joints', [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785])  # Franka "ready"
+        d('home_joints', [0.561829, 0.1989799, -0.0193699, -2.865767, 0.82115, 3.720473, 0.74422])  # Franka "ready"
         d('vel_scale', 0.1)
         d('acc_scale', 0.1)
         d('planning_time', 10.0)

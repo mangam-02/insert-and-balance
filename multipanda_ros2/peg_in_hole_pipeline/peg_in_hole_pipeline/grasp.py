@@ -40,7 +40,7 @@ def compute_grasp(node, peg_ps, params):
     ox, oy, oz = params.grasp_offset_xyz
     grasp.pose.position.x = peg_ps.pose.position.x + ox
     grasp.pose.position.y = peg_ps.pose.position.y + oy
-    grasp.pose.position.z = peg_ps.pose.position.z + oz
+    grasp.pose.position.z = 0.0382
     # Orientation: fixed top-down grasp (hardcoded).
     qx, qy, qz, qw = params.grasp_orientation_xyzw
     grasp.pose.orientation.x = qx
