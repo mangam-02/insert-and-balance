@@ -41,7 +41,7 @@ check_gpu_support() {
 }
 
 # Ensure XServer access
-xhost +local:docker > /dev/null
+#xhost +local:docker > /dev/null
 
 # ==============================================================================
 # 3. Dynamic Argument Construction (Using All Your Flags)

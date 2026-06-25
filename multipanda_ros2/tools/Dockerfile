@@ -155,5 +155,14 @@ RUN echo 'source /opt/ros/humble/setup.bash' >> $HOME_DIR/.bashrc && \
 # Ensure developer owns their home directory
 RUN chown -R developer:developer $HOME_DIR
 
+# *********************************************************
+# Node.js 20 & rosbridge (for franka_web_gui)
+# *********************************************************
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs \
+    ros-humble-rosbridge-server \
+    ros-humble-rosapi \
+    && rm -rf /var/lib/apt/lists/*
+
 USER developer
 WORKDIR $HOME_DIR/$WS_NAME/

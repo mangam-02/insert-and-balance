@@ -131,7 +131,7 @@ highlight_echo "Docker is ready"
 # *********************************************************
 # Build Process
 # *********************************************************
-DOCKERFILE="$REPO_PATH/tools/Dockerfile"
+DOCKERFILE="$REPO_PATH/multipanda_ros2/tools/Dockerfile"
 if [ ! -f "$DOCKERFILE" ]; then
     echo "Error: Dockerfile missing at $DOCKERFILE"
     exit 1

@@ -1,0 +1,53 @@
+version: '3.9'
+
+services:
+  # ─── rosbridge websocket server ──────────────────────────────────────────────
+  rosbridge:
+    image: ros:humble
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=0
+    command: >
+      bash -c "
+        source /opt/ros/humble/setup.bash &&
+        apt-get update -qq &&
+        apt-get install -y -qq ros-humble-rosbridge-server ros-humble-rosapi &&
+        ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090
+      "
+    restart: unless-stopped
+
+  # ─── mock ROS2 nodes ─────────────────────────────────────────────────────────
+  mock_nodes:
+    image: ros:humble
+    network_mode: host
+    depends_on:
+      - rosbridge
+    volumes:
+      - ./ros2_nodes:/ros2_nodes
+    environment:
+      - ROS_DOMAIN_ID=0
+    command: >
+      bash -c "
+        source /opt/ros/humble/setup.bash &&
+        sleep 3 &&
+        python3 /ros2_nodes/robot_status_publisher.py &
+        python3 /ros2_nodes/hello_world_publisher.py &
+        python3 /ros2_nodes/hello_world_subscriber.py &
+        python3 /ros2_nodes/dummy_service_server.py &
+        wait
+      "
+    restart: unless-stopped
+
+  # ─── React frontend (dev server) ─────────────────────────────────────────────
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    ports:
+      - '5173:5173'
+    command: >
+      sh -c "npm install && npm run dev"
+    environment:
+      - VITE_ROSBRIDGE_URL=ws://localhost:9090
+    restart: unless-stopped
