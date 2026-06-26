@@ -79,6 +79,21 @@ def quat_about_z(theta):
     return (0.0, 0.0, math.sin(theta / 2.0), math.cos(theta / 2.0))
 
 
+def quat_about_axis(axis, theta):
+    """Quaternion (x, y, z, w) for a rotation of theta [rad] about an arbitrary axis.
+
+    Input:  axis -- length-3 vector (need not be unit); theta -- angle [rad].
+    Output: (x, y, z, w) quaternion; identity if axis is ~zero length.
+    """
+    ax = np.asarray(axis, float)
+    n = float(np.linalg.norm(ax))
+    if n < 1e-9:
+        return (0.0, 0.0, 0.0, 1.0)
+    ax = ax / n
+    s = math.sin(theta / 2.0)
+    return (float(ax[0] * s), float(ax[1] * s), float(ax[2] * s), math.cos(theta / 2.0))
+
+
 def rotate_vec(q_xyzw, v):
     """Rotate a 3-vector by a quaternion.
 
@@ -184,6 +199,14 @@ MARKER_COLORS = {
     'lift':           (1.0, 0.5, 0.0, 1.0),   # orange
     'hole_approach':  (1.0, 0.1, 1.0, 1.0),   # magenta
     'insertion':      (1.0, 0.9, 0.1, 1.0),   # yellow
+    'tipup_approach':       (0.6, 0.9, 0.2, 1.0),   # lime
+    'tipup_tilt':           (0.3, 0.9, 0.4, 1.0),   # green-cyan
+    'tipup_grasp':          (0.2, 0.8, 0.2, 1.0),   # green
+    'tipup_lift':           (0.9, 0.6, 0.1, 1.0),   # amber
+    'tipup_clear':          (0.9, 0.8, 0.1, 1.0),   # gold
+    'tipup_stand':          (0.2, 0.7, 0.9, 1.0),   # sky
+    'tipup_place_approach': (0.7, 0.3, 0.9, 1.0),   # purple
+    'tipup_place':          (0.9, 0.2, 0.5, 1.0),   # pink
 }
 
 
@@ -284,6 +307,21 @@ class PipelineNode(Node):
         d('gripper_ns', '/panda_gripper')
         d('peg_object', 'peg')
         d('hole_object', 'insert')
+        # peg orientation check (is the peg standing up or lying down?)
+        d('peg_long_axis_local', [0.0, 0.0, 1.0])   # the peg's long axis in its OWN frame (FoundationPose model)
+        d('peg_horizontal_threshold_deg', 45.0)     # peg long axis > this from global Z => lying down (needs tip-up)
+        # tip-up regrasp: when the peg is HORIZONTAL, grasp it lying down, stand it vertical and
+        # set it back down at the same spot, then re-detect and run the normal pipeline.
+        # NOTE: the grasp/finger orientation conventions (tilt, finger yaw) likely need tuning on
+        # the robot -- verify the poses in RViz (markers) with step_through before full speed.
+        d('tipup_enabled', True)
+        d('tipup_tilt_deg', 45.0)              # gripper tilt about the horizontal axis perpendicular to the peg, at grasp
+        d('tipup_finger_yaw_deg', 45.0)        # extra yaw about the approach axis to align the physical fingers (mount comp)
+        d('tipup_grasp_z_offset', 0.03)         # m, added to the detected peg-centre height for the lying grasp
+        d('tipup_approach_height', 0.07)       # m above the grasp/place pose along base Z
+        d('tipup_lift_height', 0.07)           # m to lift straight up after grasping, before standing vertical
+        d('tipup_clear_z', 0.20)               # m, absolute base-Z to rise to (clear of the ground) BEFORE rotating the peg vertical
+        d('tipup_place_z', 0.00)               # m, EE base-Z when setting the upright peg down (tune so the peg bottom rests on the table)
         # home + planner
         d('joint_names', ['panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4',
                           'panda_joint5', 'panda_joint6', 'panda_joint7'])
@@ -359,8 +397,8 @@ class PipelineNode(Node):
         d('spiral_search_depth_tolerance', 0.005)  # m, success once descended is within this of insertion_depth (peg dropped in)
         d('spiral_search_angular_speed', 1.0)    # rad/s, how fast the spiral is traced
         # planning scene
-        d('add_ground_plane', True)
-        d('ground_z', -0.04)              # m, top surface of the floor in base_frame
+        d('add_ground_plane', False)
+        d('ground_z', -0.15)              # m, top surface of the floor in base_frame
         d('ground_size', 2.0)             # m, square extent of the floor
         # behavior
         d('state_topic', '/peg_in_hole/state')  # latched current-phase topic for the frontend
@@ -368,7 +406,10 @@ class PipelineNode(Node):
         d('keep_alive', True)             # keep node + markers alive after the run
         d('step_through', False)          # if True, wait for ENTER between phases (operator stepping)
         names = ['base_frame', 'planning_group', 'ee_link', 'foundationpose_ns', 'gripper_ns',
-                 'peg_object', 'hole_object', 'joint_names', 'home_joints', 'home_settle_sec',
+                 'peg_object', 'hole_object', 'peg_long_axis_local', 'peg_horizontal_threshold_deg',
+                 'tipup_enabled', 'tipup_tilt_deg', 'tipup_finger_yaw_deg', 'tipup_grasp_z_offset',
+                 'tipup_approach_height', 'tipup_lift_height', 'tipup_clear_z', 'tipup_place_z',
+                 'joint_names', 'home_joints', 'home_settle_sec',
                  'vel_scale', 'acc_scale', 'planning_time', 'planning_pipeline', 'planner_id',
                  'grasp_orientation_xyzw', 'grasp_yaw_offset', 'grasp_offset_xyz', 'grasp_z',
                  'grasp_approach_height', 'grasp_force', 'grasp_speed', 'gripper_closed_width',
@@ -501,6 +542,152 @@ class PipelineNode(Node):
         """
         return quat_mul(tuple(self.p.grasp_orientation_xyzw),
                         quat_about_z(self.p.grasp_yaw_offset))
+
+    def classify_peg_orientation(self, peg_ps):
+        """Decide whether the detected peg is standing up (vertical) or lying down (horizontal).
+
+        Rotates the peg's own long axis (peg_long_axis_local) by the detected orientation into
+        base_frame and measures its angle to the global Z axis.
+
+        Input:  peg_ps -- peg PoseStamped in base_frame.
+        Output: (is_horizontal, tilt_deg, axis_base):
+                  is_horizontal -- True if that angle exceeds peg_horizontal_threshold_deg;
+                  tilt_deg      -- angle [deg] between the peg long axis and global Z (0 = upright);
+                  axis_base     -- unit peg long axis in base_frame (numpy length-3).
+        """
+        o = peg_ps.pose.orientation
+        a = rotate_vec((o.x, o.y, o.z, o.w), self.p.peg_long_axis_local)
+        a = a / max(1e-9, float(np.linalg.norm(a)))
+        tilt_deg = math.degrees(math.acos(max(-1.0, min(1.0, abs(float(a[2]))))))
+        is_horizontal = tilt_deg > float(self.p.peg_horizontal_threshold_deg)
+        self.get_logger().info(
+            f'PEG ORIENTATION: long axis = ({a[0]:.3f}, {a[1]:.3f}, {a[2]:.3f}) in base | '
+            f'tilt from vertical = {tilt_deg:.1f} deg -> '
+            f'{"HORIZONTAL (needs tip-up)" if is_horizontal else "VERTICAL (ok)"}')
+        return is_horizontal, tilt_deg, a
+
+    @staticmethod
+    def _quat_tool_from_axes(z_axis, x_hint):
+        """Tool quaternion (x,y,z,w) whose +Z is z_axis and +X is x_hint projected perpendicular
+        to Z (right-handed: Y = Z x X). Used to aim the approach (Z) and align a lateral axis."""
+        z = np.asarray(z_axis, float)
+        z = z / (np.linalg.norm(z) + 1e-12)
+        x = np.asarray(x_hint, float)
+        x = x - z * float(np.dot(x, z))
+        if np.linalg.norm(x) < 1e-9:                       # x_hint parallel to z -> pick any perp
+            x = np.array([1.0, 0.0, 0.0]) - z * float(z[0])
+        x = x / (np.linalg.norm(x) + 1e-12)
+        y = np.cross(z, x)
+        return mat_to_quat(np.column_stack((x, y, z)))
+
+    def compute_tipup(self, peg_ps, axis_base):
+        """Build the tip-up pose sequence for a lying peg (all PoseStamped in base_frame).
+
+        Grasp: tilted top-down over the peg, fingers across the cylinder (perpendicular to its
+        horizontal axis). Stand: the whole grasped peg is rotated so its long axis points straight
+        DOWN (vertical), by pre-multiplying a base-frame rotation that maps the peg axis to -Z onto
+        the grasp orientation -- so the peg ends vertical regardless of the grasp tilt. Place: set
+        it back down at the same x/y, upright.
+
+        Input:  peg_ps -- detected (lying) peg PoseStamped; axis_base -- unit peg long axis in base.
+        Output: dict name -> PoseStamped for each waypoint.
+        """
+        p = self.p
+        px, py, pz = peg_ps.pose.position.x, peg_ps.pose.position.y, peg_ps.pose.position.z
+        a = np.asarray(axis_base, float)
+        a = a / (np.linalg.norm(a) + 1e-12)
+        h = np.array([a[0], a[1], 0.0])                    # cylinder direction in the table plane
+        if np.linalg.norm(h) < 1e-6:
+            h = np.array([1.0, 0.0, 0.0])
+        h = h / np.linalg.norm(h)
+        # Straight top-down approach orientation (fingers across the cylinder). The robot moves
+        # horizontally to this pose FIRST, then tilts in place before descending.
+        q_top = quat_mul(self._quat_tool_from_axes([0.0, 0.0, -1.0], h),
+                         quat_about_z(math.radians(p.tipup_finger_yaw_deg)))
+        # Tilted approach: lean the straight-down approach by tipup_tilt_deg along the peg axis,
+        # AWAY from the base, so it points down-and-out toward -Z (negative tilt leans the other
+        # way). Horizontal lean direction = the peg axis pointing away from the base origin.
+        r = np.array([px, py, 0.0])
+        d_lean = h if float(np.dot(h, r)) >= 0.0 else -h
+        th = math.radians(p.tipup_tilt_deg)
+        z_app = -np.array([0.0, 0.0, 1.0]) * math.cos(th) + d_lean * math.sin(th)
+        q_grasp = quat_mul(self._quat_tool_from_axes(z_app, h),
+                           quat_about_z(math.radians(p.tipup_finger_yaw_deg)))
+        # stand upright: base-frame rotation taking the peg axis a -> straight down, applied to q_grasp
+        angle = math.acos(max(-1.0, min(1.0, float(np.dot(a, [0.0, 0.0, -1.0])))))
+        q_align = quat_about_axis(np.cross(a, [0.0, 0.0, -1.0]), angle)
+        q_stand = quat_mul(q_align, q_grasp)
+        gz = pz + float(p.tipup_grasp_z_offset)
+
+        def mk(x, y, z, q):
+            ps = PoseStamped()
+            ps.header.frame_id = peg_ps.header.frame_id
+            ps.header.stamp = self.get_clock().now().to_msg()
+            ps.pose.position.x, ps.pose.position.y, ps.pose.position.z = float(x), float(y), float(z)
+            (ps.pose.orientation.x, ps.pose.orientation.y,
+             ps.pose.orientation.z, ps.pose.orientation.w) = (float(q[0]), float(q[1]),
+                                                              float(q[2]), float(q[3]))
+            return ps
+
+        return {
+            'tipup_approach':       mk(px, py, gz + p.tipup_approach_height, q_top),    # top-down, untilted
+            'tipup_tilt':           mk(px, py, gz + p.tipup_approach_height, q_grasp),  # tilt in place
+            'tipup_grasp':          mk(px, py, gz, q_grasp),
+            'tipup_lift':           mk(px, py, gz + p.tipup_lift_height, q_grasp),
+            'tipup_clear':          mk(px, py, p.tipup_clear_z, q_grasp),   # rise clear of the ground (still horizontal)
+            'tipup_stand':          mk(px, py, p.tipup_clear_z, q_stand),   # align vertical up high
+            'tipup_place_approach': mk(px, py, p.tipup_place_z + p.tipup_approach_height, q_stand),
+            'tipup_place':          mk(px, py, p.tipup_place_z, q_stand),
+        }
+
+    def tip_up_peg(self, peg_ps, axis_base):
+        """Stand a lying peg upright: grasp it tilted, lift, rotate to vertical, set it down at the
+        same x/y, release and retract. Leaves the peg standing for a fresh DETECT.
+
+        Input:  peg_ps -- detected lying peg; axis_base -- unit peg long axis in base.
+        Output: True on success; False (via _abort) on any motion/grasp failure.
+        """
+        log = self.get_logger()
+        log.info('==> TIP-UP: peg is lying down; standing it upright before grasp.')
+        poses = self.compute_tipup(peg_ps, axis_base)
+        for name, ps in poses.items():
+            self.show_marker(name, ps)
+            log.info(f'  {name:22s}: {fmt_pose(ps)}')
+        self._pause('TIP-UP COMPUTE', 'TIP-UP EXECUTE')   # inspect the poses in RViz first
+        # The tip-up grasps and places the peg right at the table, so the ground_plane collision
+        # object makes every plan invalid. Drop it for the maneuver and ALWAYS restore it after
+        # (the normal grasp/insert that follows still wants the floor).
+        if self.p.add_ground_plane:
+            self.remove_ground_plane()
+        try:
+            seq = [('tipup_approach', 'tip-up approach (top-down)'),
+                   ('tipup_tilt', 'tip-up tilt in place'),
+                   ('tipup_grasp', 'tip-up grasp')]
+            for key, label in seq:
+                ok, code = self.goto_pose(poses[key], label)
+                if not ok:
+                    return self._abort('TIP-UP', f'{label} failed ({code})')
+            held, width, msg = self.gripper_force_grasp()
+            wtxt = f'{width:.4f} m' if width is not None else 'unknown'
+            log.info(f'tip-up grasp: held={held}, width={wtxt}, msg="{msg}"')
+            if not held:
+                return self._abort('TIP-UP', f'no peg grasped (width={wtxt})')
+            for key, label in [('tipup_lift', 'tip-up lift'),
+                               ('tipup_clear', 'tip-up clear ground'),
+                               ('tipup_stand', 'tip-up stand vertical'),
+                               ('tipup_place_approach', 'tip-up place approach'),
+                               ('tipup_place', 'tip-up place')]:
+                ok, code = self.goto_pose(poses[key], label)
+                if not ok:
+                    return self._abort('TIP-UP', f'{label} failed ({code})')
+            self.gripper_open()                           # release the now-upright peg
+            ok, code = self.goto_pose(poses['tipup_place_approach'], 'tip-up retract')
+            if not ok:
+                log.warn(f'tip-up retract failed ({code}); continuing')
+            return True
+        finally:
+            if self.p.add_ground_plane:
+                self.add_ground_plane()                   # restore the floor for the rest of the run
 
     def compute_grasp(self, peg_ps):
         """Build the grasp and approach poses from the detected peg pose.
@@ -1167,7 +1354,7 @@ class PipelineNode(Node):
         thickness = 0.02
         co = CollisionObject()
         co.header.frame_id = self.p.base_frame
-        co.id = 'ground_plane'
+        co.id = 'floor_collision_box'
         box = SolidPrimitive()
         box.type = SolidPrimitive.BOX
         box.dimensions = [float(self.p.ground_size), float(self.p.ground_size), thickness]
@@ -1187,6 +1374,34 @@ class PipelineNode(Node):
         self.get_logger().info(
             f'ground plane top@z={self.p.ground_z:.3f} '
             f'{"added to" if ok else "FAILED to add to"} planning scene')
+        return ok
+
+    def remove_ground_plane(self, timeout_sec=5.0):
+        """Remove the ground_plane collision object from the planning scene.
+
+        Used while operating intentionally close to the table (e.g. the tip-up grasp/place),
+        where the ground plane would otherwise make every plan collide. Restore it afterward
+        with add_ground_plane().
+
+        Input:  none.
+        Output: True if the scene diff was applied, else False.
+        """
+        if not self._scene.wait_for_service(timeout_sec=10.0):
+            self.get_logger().warn('apply_planning_scene unavailable — cannot remove ground plane')
+            return False
+        co = CollisionObject()
+        co.header.frame_id = self.p.base_frame
+        co.id = 'ground_plane'
+        co.operation = CollisionObject.REMOVE
+        scene = PlanningScene()
+        scene.is_diff = True
+        scene.world.collision_objects.append(co)
+        future = self._scene.call_async(ApplyPlanningScene.Request(scene=scene))
+        rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
+        resp = future.result()
+        ok = bool(resp and resp.success)
+        self.get_logger().info(f'ground plane {"removed from" if ok else "FAILED to remove from"} '
+                               f'planning scene')
         return ok
 
     # ================================================================================
@@ -1315,6 +1530,28 @@ class PipelineNode(Node):
         log.info(f'HOLE : {fmt_pose(hole)}')
         self.show_marker('peg', peg)
         self.show_marker('hole', hole)
+        # Is the peg standing up or lying on its side? A lying peg needs a tip-up regrasp first.
+        peg_horizontal, peg_tilt_deg, peg_axis = self.classify_peg_orientation(peg)
+        if peg_horizontal and self.p.tipup_enabled:
+            self._set_state('TIP_UP')
+            if not self.tip_up_peg(peg, peg_axis):
+                return False                           # _abort already logged
+            # Back to HOME, then re-detect the (now upright) peg and continue as usual.
+            ok, code = self.goto_home('home after tip-up')
+            if not ok:
+                return self._abort('TIP-UP', f'home after tip-up failed ({code})')
+            self._dwell(self.p.home_settle_sec)
+            self._set_state('DETECT')
+            log.info('==> RE-DETECT: read peg pose after tip-up.')
+            peg = self.get_object_pose(self.p.peg_object)
+            if peg is None:
+                return self._abort('RE-DETECT', 'peg not found after tip-up')
+            log.info(f'PEG (re-detect): {fmt_pose(peg)}')
+            self.show_marker('peg', peg)
+            still_horizontal, _, _ = self.classify_peg_orientation(peg)
+            if still_horizontal:
+                return self._abort('TIP-UP', 'peg still horizontal after tip-up '
+                                   '(grasp/stand orientation likely needs tuning)')
         self._pause('DETECT', 'COMPUTE GRASP')
 
         # --- COMPUTE GRASP ----------------------------------------------------------

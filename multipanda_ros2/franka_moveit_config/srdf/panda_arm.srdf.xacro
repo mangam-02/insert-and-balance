@@ -20,7 +20,7 @@
   <!-- Ground plane (defined in panda_arm.urdf.xacro, fixed 4 cm below link0). It is a
        legitimate neighbour of the base, so disable those self-collision pairs; every other
        link stays enabled so MoveIt avoids planning the arm/hand through the floor. -->
-  <xacro:arg name="ground_plane" default="true"/>
+  <xacro:arg name="ground_plane" default="false"/>
   <xacro:if value="$(arg ground_plane)">
     <disable_collisions link1="ground_plane" link2="${arm_id}_link0" reason="Adjacent"/>
     <disable_collisions link1="ground_plane" link2="${arm_id}_link1" reason="Never"/>

@@ -31,7 +31,7 @@
        avoid driving the arm/hand into the floor, while leaving a gap to the base itself.
        The <visual> makes it show up in RViz's RobotModel display. Collisions against
        link0/link1 are disabled in the SRDF (see panda_arm.srdf.xacro). -->
-  <xacro:arg name="ground_plane" default="true"/>
+  <xacro:arg name="ground_plane" default="false"/>
   <xacro:if value="$(arg ground_plane)">
     <link name="ground_plane">
       <visual>
