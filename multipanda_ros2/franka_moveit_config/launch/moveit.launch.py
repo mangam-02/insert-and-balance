@@ -208,7 +208,7 @@ def generate_launch_description():
         executable='static_transform_publisher',
         name='camera_static_tf',
         output='log',
-        arguments=['--x', '0.001', '--y', '-0.0963501', '--z', '0.05698960',
+        arguments=['--x', '0.00', '--y', '-0.0973501', '--z', '0.04698960',
         #arguments=['--x', '0.00790127', '--y', '-0.08703501', '--z', '0.05698960',
         #arguments=['--x', '0.007474', '--y', '-0.07474', '--z', '0.0286',
                    '--qx', '0.00827584', '--qy', '0.30689029',

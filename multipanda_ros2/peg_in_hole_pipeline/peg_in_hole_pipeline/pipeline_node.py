@@ -289,7 +289,7 @@ class PipelineNode(Node):
                           'panda_joint5', 'panda_joint6', 'panda_joint7'])
         d('home_joints', [0.561829, 0.1989799, -0.0193699, -2.865767, 0.82115, 3.720473, 0.74422])
         d('home_settle_sec', 2.0)         # dwell at HOME so the arm/camera TF settle before DETECT
-        d('vel_scale', 0.1)
+        d('vel_scale', 0.4)
         d('acc_scale', 0.1)
         d('planning_time', 10.0)
         d('planning_pipeline', 'pilz')    # move_group pipeline: ompl / pilz
@@ -309,7 +309,7 @@ class PipelineNode(Node):
         # lift + insertion
         d('lift_height', 0.1)             # m straight up after grasp
         d('hole_approach_height', 0.13)   # m above the hole
-        d('insertion_depth', 0.03)        # m straight down
+        d('insertion_depth', 0.05)        # m straight down
         d('cartesian_step', 0.005)
         d('cartesian_min_fraction', 0.9)
         # impedance insertion (force-regulated). INSERT uses the Cartesian impedance
@@ -324,7 +324,7 @@ class PipelineNode(Node):
         d('franka_state_topic', '/franka_robot_state_broadcaster/robot_state')
         d('impedance_pose_topic', '/cartesian_impedance/pose_desired')
         d('impedance_stiffness_topic', '/cartesian_impedance/stiffness')
-        d('insertion_target_force', 6.0)   # N, contact force the loop regulates to
+        d('insertion_target_force', 4.0)   # N, contact force the loop regulates to
         d('insertion_max_force', 20.0)      # N, |force| above this aborts (hard safety cap)
         d('insertion_force_gain', 2.0e-5)   # m/N per step, equilibrium servo gain
         d('insertion_force_sign', -1.0)     # maps o_f_ext_hat_k[2] -> +pressing force. This robot reports a downward press as NEGATIVE Fz, so -1 makes f positive while pressing (true force regulation; all force thresholds below are positive). Flip to +1 only if a press reads positive on your robot.
@@ -347,15 +347,17 @@ class PipelineNode(Node):
         d('impedance_move_settle_timeout', 7.0)  # s, wait for the EE to settle after the ramp
         # spiral search. If the peg presses on the surface instead of dropping into the hole,
         # trace an outward Archimedean spiral in x/y (under continued downward force) until the
-        # peg slips in. Engages when |Fz| stays at/above the engage force (stuck on the surface)
-        # and stops the moment the contact force relaxes below the release force (peg dropped in).
+        # peg slips in. Engages when the press force reaches the engage force (stuck on the
+        # surface) and ENDS by POSITION: success once the EE has descended to within
+        # spiral_search_depth_tolerance of the target insertion depth (the peg dropped into the
+        # hole), otherwise it gives up after spiral_search_circles revolutions.
         d('spiral_search_enabled', True)
         d('spiral_search_circles', 20.0)          # revolutions traced from centre to max radius
         d('spiral_search_max_radius', 0.010)     # m, radius at the outermost circle
-        d('spiral_search_engage_force', 5.0)     # N, press force at/above which the peg is stuck -> start spiral
-        d('spiral_search_release_force', 1.0)    # N, press force below which the peg has dropped in -> stop spiral
-        d('spiral_search_press_force', 5.0)      # N, downward press the spiral REGULATES to (force cap while searching; must be > release_force)
-        d('spiral_search_angular_speed', 1.5)    # rad/s, how fast the spiral is traced
+        d('spiral_search_engage_force', 3.0)     # N, press force at/above which the peg is stuck -> start spiral
+        d('spiral_search_press_force', 3.0)      # N, downward press the spiral REGULATES to (force cap while searching)
+        d('spiral_search_depth_tolerance', 0.005)  # m, success once descended is within this of insertion_depth (peg dropped in)
+        d('spiral_search_angular_speed', 1.0)    # rad/s, how fast the spiral is traced
         # planning scene
         d('add_ground_plane', True)
         d('ground_z', -0.04)              # m, top surface of the floor in base_frame
@@ -364,7 +366,7 @@ class PipelineNode(Node):
         d('state_topic', '/peg_in_hole/state')  # latched current-phase topic for the frontend
         d('debug_markers', True)          # publish colored pose arrows for RViz
         d('keep_alive', True)             # keep node + markers alive after the run
-        d('step_through', True)           # wait for ENTER between phases
+        d('step_through', False)          # if True, wait for ENTER between phases (operator stepping)
         names = ['base_frame', 'planning_group', 'ee_link', 'foundationpose_ns', 'gripper_ns',
                  'peg_object', 'hole_object', 'joint_names', 'home_joints', 'home_settle_sec',
                  'vel_scale', 'acc_scale', 'planning_time', 'planning_pipeline', 'planner_id',
@@ -383,8 +385,8 @@ class PipelineNode(Node):
                  'impedance_move_settle_pos', 'impedance_move_settle_ang',
                  'impedance_move_settle_timeout',
                  'spiral_search_enabled', 'spiral_search_circles', 'spiral_search_max_radius',
-                 'spiral_search_engage_force', 'spiral_search_release_force',
-                 'spiral_search_press_force', 'spiral_search_angular_speed',
+                 'spiral_search_engage_force', 'spiral_search_press_force',
+                 'spiral_search_depth_tolerance', 'spiral_search_angular_speed',
                  'add_ground_plane', 'ground_z', 'ground_size',
                  'state_topic', 'debug_markers', 'keep_alive', 'step_through']
         return SimpleNamespace(**{n: g(n) for n in names})
@@ -879,12 +881,12 @@ class PipelineNode(Node):
         the position controller before returning.
 
         Spiral search (spiral_search_enabled): if the peg presses on the surface without
-        descending (contact force at/above spiral_search_engage_force), an outward Archimedean
+        descending (press force at/above spiral_search_engage_force), an outward Archimedean
         spiral in x/y is added to the equilibrium pose -- spiral_search_circles revolutions out
-        to spiral_search_max_radius -- while the downward force is held. The moment the peg slips
-        into the hole the contact force relaxes below spiral_search_release_force; the search
-        stops and INSERT succeeds (the caller then opens the gripper). Exhausting the spiral
-        without a force drop aborts.
+        to spiral_search_max_radius -- while a gentle press (spiral_search_press_force) is held.
+        The search ends by POSITION: once the peg drops into the hole and the EE descends to
+        within spiral_search_depth_tolerance of the target insertion depth, INSERT succeeds (the
+        caller then opens the gripper). Tracing the whole spiral without reaching depth aborts.
 
         Input:  none (uses the impedance/insertion_* params).
         Output: (ok, reason).
@@ -942,9 +944,8 @@ class PipelineNode(Node):
                 if descended >= p.insertion_depth:               # success: reached full depth
                     return True, f'inserted {descended*1000:.1f} mm at F={f:.1f} N'
                 # spiral search: engage when the peg presses hard on the surface without
-                # descending; disengage (success) the moment it slips into the hole and the
-                # contact force relaxes; abort if the whole spiral is traced without a drop.
-                # f is +ve while pressing (insertion_force_sign), so these thresholds are +ve N.
+                # descending. f is +ve while pressing (insertion_force_sign), so the engage
+                # threshold is +ve N.
                 if p.spiral_search_enabled and not searching and f >= p.spiral_search_engage_force:
                     searching = True
                     theta = 0.0
@@ -953,11 +954,15 @@ class PipelineNode(Node):
                              f'{p.spiral_search_circles:.0f} circles out to '
                              f'r={p.spiral_search_max_radius*1000:.1f} mm')
                 if searching:
-                    if f < p.spiral_search_release_force:         # hole found: force relaxed
-                        return True, (f'hole found via spiral search at F={f:.1f} N '
-                                      f'(< {p.spiral_search_release_force:.1f} N), '
-                                      f'r={math.hypot(sx, sy)*1000:.1f} mm, '
-                                      f'depth {descended*1000:.1f} mm')
+                    # End by POSITION, not force: success once the peg has dropped to within
+                    # spiral_search_depth_tolerance of the target insertion depth; otherwise give
+                    # up after the whole spiral (circle limit) is traced.
+                    if p.insertion_depth - descended <= p.spiral_search_depth_tolerance:
+                        return True, (f'hole found via spiral search: descended '
+                                      f'{descended*1000:.1f} mm (within '
+                                      f'{p.spiral_search_depth_tolerance*1000:.1f} mm of '
+                                      f'{p.insertion_depth*1000:.0f} mm), '
+                                      f'r={math.hypot(sx, sy)*1000:.1f} mm')
                     if theta >= theta_max:                        # spiral exhausted, give up
                         return False, (f'spiral search exhausted '
                                        f'({p.spiral_search_circles:.0f} circles, '
@@ -1379,24 +1384,30 @@ class PipelineNode(Node):
                 return self._abort('INSERT', f'insertion failed (planned fraction {fraction:.2f})')
 
         # --- RELEASE + RETURN HOME (retract out of the hole) ------------------------
+        # impedance_insert() has already handed control back to the position controller, so the
+        # whole release/retract/home sequence below runs in POSITION control -- we do NOT
+        # re-engage the impedance controller after insertion. Open the gripper FIRST to drop the
+        # peg, then move the arm away.
         self._set_state('RETURN_HOME')
-        log.info('==> RETURN HOME: release peg, retract above the hole, then move to ready pose.')
+        log.info('==> RELEASE: open gripper (position control), then retract and return home.')
         if self.p.open_gripper_at_end:
             self.gripper_open()
         # Unlike the first HOME, this one starts with the tool DOWN in the hole. Going straight
         # to the home joint config from there swings the tool sideways through the fixture (the
         # joint move does not lift out first). Retract to hole_approach -- the known-good free
         # pose above the hole we already reached on the way in -- so the home move starts free.
-        ok, code = self.goto_pose(hole_approach, 'retract')
+        # Use the MoveIt position-control moves directly (not the impedance dispatcher) so we
+        # stay in position control regardless of use_impedance_moves.
+        ok, code = self.move_to_pose(hole_approach)
         if not ok:
-            log.warn(f'retract above hole failed ({code}); attempting return home anyway')
-        ok, code = self.goto_home('return home')
-        log.info(f'return-home motion: {"OK" if ok else "FAILED"} ({code})')
+            log.warn(f'retract above hole failed (code {code}); attempting return home anyway')
+        ok, code = self.move_to_joints(self.p.joint_names, self.p.home_joints)
+        log.info(f'return-home motion: {"OK" if ok else "FAILED"} (code {code})')
 
         # --- DONE (final return to HOME, safe resting pose) -------------------------
         log.info('==================  PEG-IN-HOLE SUCCESS  ==================')
         log.info('Final return to HOME (safe pose).')
-        self.goto_home('final home')
+        self.move_to_joints(self.p.joint_names, self.p.home_joints)
         self._set_state('DONE')
         return True
 
