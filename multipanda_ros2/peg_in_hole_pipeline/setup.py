@@ -15,7 +15,7 @@ setup(
     zip_safe=True,
     maintainer='minga-09',
     maintainer_email='paulkroeger10@gmail.com',
-    description='State-machine peg grasp + insertion pipeline (FoundationPose + MoveIt + franka_gripper).',
+    description='Sequential peg grasp + insertion pipeline (FoundationPose + MoveIt + franka_gripper).',
     license='Apache-2.0',
     entry_points={
         'console_scripts': [

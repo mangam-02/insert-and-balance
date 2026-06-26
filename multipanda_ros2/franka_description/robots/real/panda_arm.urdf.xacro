@@ -15,4 +15,46 @@
   </xacro:if>
   <xacro:include filename="$(find franka_description)/robots/real/panda_arm.ros2_control.xacro"/>
   <xacro:panda_arm_ros2_control ns="$(arg arm_id)" robot_ip="$(arg robot_ip)" use_fake_hardware="$(arg use_fake_hardware)" fake_sensor_commands="$(arg fake_sensor_commands)"/>
+
+  <!-- Tool-center-point (tcp) - 15 cm along +Z from the flange (panda_link8), NO rotation.
+       This is the planning tip of the panda_manipulator group (see panda_arm.srdf.xacro)
+       and the pipeline's ee_link. It replaces the former tcp static_transform_publisher in
+       moveit.launch.py (a model link is published by robot_state_publisher instead). -->
+  <link name="tcp"/>
+  <joint name="$(arg arm_id)_tcp_joint" type="fixed">
+    <parent link="$(arg arm_id)_link8"/>
+    <child link="tcp"/>
+    <origin xyz="0 0 0.15" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Ground/table collision plane. Top face sits 4 cm below panda_link0 so MoveIt plans
+       avoid driving the arm/hand into the floor, while leaving a gap to the base itself.
+       The <visual> makes it show up in RViz's RobotModel display. Collisions against
+       link0/link1 are disabled in the SRDF (see panda_arm.srdf.xacro). -->
+  <xacro:arg name="ground_plane" default="true"/>
+  <xacro:if value="$(arg ground_plane)">
+    <link name="ground_plane">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="2.0 2.0 0.02"/>
+        </geometry>
+        <material name="ground_plane_gray">
+          <color rgba="0.55 0.55 0.55 0.4"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="2.0 2.0 0.02"/>
+        </geometry>
+      </collision>
+    </link>
+    <joint name="$(arg arm_id)_link0_to_ground_plane" type="fixed">
+      <parent link="$(arg arm_id)_link0"/>
+      <child link="ground_plane"/>
+      <!-- box is 2 cm thick; center 5 cm below link0 -> top face at z = -0.04 m -->
+      <origin xyz="0 0 -0.05" rpy="0 0 0"/>
+    </joint>
+  </xacro:if>
 </robot>

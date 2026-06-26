@@ -13,7 +13,6 @@ from launch_ros.actions import Node
 def generate_launch_description():
     args = [
         DeclareLaunchArgument('grasp_force', default_value='20.0'),
-        DeclareLaunchArgument('grasp_width', default_value='0.02'),
         DeclareLaunchArgument('insertion_depth', default_value='0.08'),
         DeclareLaunchArgument('hole_approach_height', default_value='0.10'),
         DeclareLaunchArgument('vel_scale', default_value='0.1'),
@@ -25,7 +24,6 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'grasp_force': LaunchConfiguration('grasp_force'),
-            'grasp_width': LaunchConfiguration('grasp_width'),
             'insertion_depth': LaunchConfiguration('insertion_depth'),
             'hole_approach_height': LaunchConfiguration('hole_approach_height'),
             'vel_scale': LaunchConfiguration('vel_scale'),

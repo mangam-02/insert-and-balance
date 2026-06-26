@@ -14,7 +14,12 @@ Status: Position Planning mit Moveit geht,
 - Launch the Robot with RVIZ and Position Control in Moveit:
 
 ros2 launch franka_moveit_config moveit.launch.py robot_ip:=172.16.0.2 use_rviz:=true
+ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true
 
+## Perception Container
+ROS_DOMAIN_ID=1 bash docker/run_peg_in_hole.sh --ros_camera --serve       --peg_mesh objects/peg.stl --insert_mesh objects/insert.stl       --min_score 90
+ 
+ 
 
 - Launch Docker container
 cd manipulatoren/multipanda_ros2

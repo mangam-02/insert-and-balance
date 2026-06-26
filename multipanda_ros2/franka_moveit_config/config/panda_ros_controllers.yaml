@@ -8,6 +8,16 @@ controller_manager:
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
+    # Torque controller used for the force-regulated insertion (peg_in_hole_pipeline).
+    # Loaded inactive by moveit.launch; the pipeline activates it only during INSERT.
+    cartesian_impedance_controller:
+      type: franka_controllers/CartesianImpedanceController
+
+    # Publishes franka_msgs/FrankaState (O_T_EE + external wrench o_f_ext_hat_k) so the
+    # pipeline can monitor the contact force during insertion.
+    franka_robot_state_broadcaster:
+      type: franka_robot_state_broadcaster/FrankaRobotStateBroadcaster
+
 
 panda_arm_controller:
   ros__parameters:
@@ -24,3 +34,16 @@ panda_arm_controller:
       - panda_joint5
       - panda_joint6
       - panda_joint7
+
+cartesian_impedance_controller:
+  ros__parameters:
+    arm_id: panda
+    # Initial stiffness; the pipeline overrides per-axis stiffness via the
+    # /cartesian_impedance/stiffness topic at insertion time. Damping is critical (2*sqrt(k)).
+    pos_stiff: 800.0
+    rot_stiff: 30.0
+
+franka_robot_state_broadcaster:
+  ros__parameters:
+    arm_id: panda
+    frequency: 100   # Hz; force feedback rate for the insertion loop

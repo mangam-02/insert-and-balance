@@ -25,6 +25,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 import yaml
 
@@ -66,7 +67,9 @@ def generate_launch_description():
          ' robot_ip:=', robot_ip, ' use_fake_hardware:=', use_fake_hardware,
          ' fake_sensor_commands:=', fake_sensor_commands])
 
-    robot_description = {'robot_description': robot_description_config}
+    # Wrap as a str so launch does NOT run the URDF through yaml.safe_load (which throws on
+    # benign content like a "key: value" substring inside an XML comment).
+    robot_description = {'robot_description': ParameterValue(robot_description_config, value_type=str)}
 
     franka_semantic_xacro_file = os.path.join(get_package_share_directory('franka_moveit_config'),
                                               'srdf',
@@ -75,30 +78,54 @@ def generate_launch_description():
         [FindExecutable(name='xacro'), ' ', franka_semantic_xacro_file, ' hand:=', load_gripper]
     )
     robot_description_semantic = {
-        'robot_description_semantic': robot_description_semantic_config
+        'robot_description_semantic': ParameterValue(robot_description_semantic_config,
+                                                     value_type=str)
     }
 
     kinematics_yaml = load_yaml(
         'franka_moveit_config', 'config/kinematics.yaml'
     )
 
-    # Planning Functionality
-    ompl_planning_pipeline_config = {
-        'move_group': {
-            'planning_plugin': 'ompl_interface/OMPLPlanner',
-            'request_adapters': 'default_planner_request_adapters/AddTimeOptimalParameterization '
-                                'default_planner_request_adapters/ResolveConstraintFrames '
-                                'default_planner_request_adapters/FixWorkspaceBounds '
-                                'default_planner_request_adapters/FixStartStateBounds '
-                                'default_planner_request_adapters/FixStartStateCollision '
-                                'default_planner_request_adapters/FixStartStatePathConstraints',
-            'start_state_max_bounds_error': 0.1,
+    # Planning Functionality — two named pipelines:
+    #   * ompl  : default. Tolerates an empty planner_id, so RViz's interactive MotionPlanning
+    #             panel works out of the box.
+    #   * pilz  : Pilz Industrial Motion Planner (PTP / LIN / CIRC). Has NO default planner, so
+    #             a request MUST set planner_id (the peg_in_hole_pipeline does: pipeline_id=pilz,
+    #             planner_id=PTP). That is why it can't be the default pipeline for RViz.
+    ompl_pipeline = {
+        'planning_plugin': 'ompl_interface/OMPLPlanner',
+        'request_adapters': 'default_planner_request_adapters/AddTimeOptimalParameterization '
+                            'default_planner_request_adapters/ResolveConstraintFrames '
+                            'default_planner_request_adapters/FixWorkspaceBounds '
+                            'default_planner_request_adapters/FixStartStateBounds '
+                            'default_planner_request_adapters/FixStartStateCollision '
+                            'default_planner_request_adapters/FixStartStatePathConstraints',
+        'start_state_max_bounds_error': 0.1,
+    }
+    ompl_pipeline.update(load_yaml('franka_moveit_config', 'config/ompl_planning.yaml') or {})
+    pilz_pipeline = {
+        'planning_plugin': 'pilz_industrial_motion_planner/CommandPlanner',
+        'request_adapters': 'default_planner_request_adapters/FixWorkspaceBounds '
+                            'default_planner_request_adapters/FixStartStateBounds '
+                            'default_planner_request_adapters/FixStartStateCollision '
+                            'default_planner_request_adapters/FixStartStatePathConstraints',
+        'default_planner_config': 'PTP',
+    }
+    planning_pipeline_config = {
+        'planning_pipelines': ['ompl', 'pilz'],
+        'default_planning_pipeline': 'ompl',
+        'ompl': ompl_pipeline,
+        'pilz': pilz_pipeline,
+    }
+
+    # Pilz needs explicit cartesian + joint (incl. acceleration) limits, loaded under the
+    # robot_description_planning namespace.
+    robot_description_planning = {
+        'robot_description_planning': {
+            **(load_yaml('franka_moveit_config', 'config/pilz_cartesian_limits.yaml') or {}),
+            **(load_yaml('franka_moveit_config', 'config/joint_limits.yaml') or {}),
         }
     }
-    ompl_planning_yaml = load_yaml(
-        'franka_moveit_config', 'config/ompl_planning.yaml'
-    )
-    ompl_planning_pipeline_config['move_group'].update(ompl_planning_yaml)
 
     # Trajectory Execution Functionality
     moveit_simple_controllers_yaml = load_yaml(
@@ -133,7 +160,8 @@ def generate_launch_description():
             robot_description,
             robot_description_semantic,
             kinematics_yaml,
-            ompl_planning_pipeline_config,
+            planning_pipeline_config,
+            robot_description_planning,
             trajectory_execution,
             moveit_controllers,
             planning_scene_monitor_parameters,
@@ -153,7 +181,8 @@ def generate_launch_description():
         parameters=[
             robot_description,
             robot_description_semantic,
-            ompl_planning_pipeline_config,
+            planning_pipeline_config,
+            robot_description_planning,
             kinematics_yaml,
         ],
     )
@@ -167,16 +196,9 @@ def generate_launch_description():
         parameters=[robot_description],
     )
 
-    # Tool-center-point frame: 15 cm along +Z from the flange (panda_link8)
-    tcp_static_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='tcp_static_tf',
-        output='log',
-        arguments=['--x', '0', '--y', '0', '--z', '0.15',
-                   '--roll', '0', '--pitch', '0', '--yaw', '0',
-                   '--frame-id', 'panda_link8', '--child-frame-id', 'tcp'],
-    )
+    # NOTE: the 'tcp' frame (15 cm off panda_link8) is now a real URDF link published by
+    # robot_state_publisher (see franka_description/.../real/panda_arm.urdf.xacro), so the
+    # former tcp static_transform_publisher was removed to avoid two publishers for link8->tcp.
 
     # Eye-in-hand wrist-camera extrinsic (from wrist_cam_calibration/run1):
     # panda_link8 -> camera_optical_frame. This bridges the robot tree to the camera so
@@ -186,7 +208,9 @@ def generate_launch_description():
         executable='static_transform_publisher',
         name='camera_static_tf',
         output='log',
-        arguments=['--x', '0.00790127', '--y', '-0.08703501', '--z', '0.05698960',
+        arguments=['--x', '0.001', '--y', '-0.0963501', '--z', '0.05698960',
+        #arguments=['--x', '0.00790127', '--y', '-0.08703501', '--z', '0.05698960',
+        #arguments=['--x', '0.007474', '--y', '-0.07474', '--z', '0.0286',
                    '--qx', '0.00827584', '--qy', '0.30689029',
                    '--qz', '0.95060955', '--qw', '0.04573117',
                    '--frame-id', 'panda_link8', '--child-frame-id', 'camera_optical_frame'],
@@ -211,7 +235,9 @@ def generate_launch_description():
 
     # Load controllers
     load_controllers = []
-    for controller in ['panda_arm_controller', 'joint_state_broadcaster']:
+    # Active on startup: position controller (MoveIt), joint + franka-state broadcasters.
+    for controller in ['panda_arm_controller', 'joint_state_broadcaster',
+                       'franka_robot_state_broadcaster']:
         load_controllers += [
             ExecuteProcess(
                 cmd=['ros2 run controller_manager spawner {}'.format(controller)],
@@ -219,6 +245,15 @@ def generate_launch_description():
                 output='screen',
             )
         ]
+    # Loaded but INACTIVE: the impedance controller (torque) conflicts with the position
+    # controller, so the peg_in_hole_pipeline activates it only during force-regulated INSERT.
+    load_controllers += [
+        ExecuteProcess(
+            cmd=['ros2 run controller_manager spawner cartesian_impedance_controller --inactive'],
+            shell=True,
+            output='screen',
+        )
+    ]
 
     # Warehouse mongodb server
     db_config = LaunchConfiguration('db')
@@ -275,7 +310,6 @@ def generate_launch_description():
          db_arg,
          rviz_node,
          robot_state_publisher,
-         tcp_static_tf,
          camera_static_tf,
          run_move_group_node,
          ros2_control_node,

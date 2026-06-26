@@ -1,0 +1,7 @@
+# Cartesian velocity/acceleration limits required by the Pilz LIN/CIRC planners.
+# Loaded into move_group under the `robot_description_planning` namespace.
+cartesian_limits:
+  max_trans_vel: 1.0      # m/s
+  max_trans_acc: 2.25     # m/s^2
+  max_trans_dec: -5.0     # m/s^2 (deceleration, must be negative)
+  max_rot_vel: 1.57       # rad/s
