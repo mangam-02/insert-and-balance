@@ -391,7 +391,7 @@ class PipelineNode(Node):
         # hole), otherwise it gives up after spiral_search_circles revolutions.
         d('spiral_search_enabled', True)
         d('spiral_search_circles', 20.0)          # revolutions traced from centre to max radius
-        d('spiral_search_max_radius', 0.010)     # m, radius at the outermost circle
+        d('spiral_search_max_radius', 0.015)     # m, radius at the outermost circle
         d('spiral_search_engage_force', 3.0)     # N, press force at/above which the peg is stuck -> start spiral
         d('spiral_search_press_force', 3.0)      # N, downward press the spiral REGULATES to (force cap while searching)
         d('spiral_search_depth_tolerance', 0.005)  # m, success once descended is within this of insertion_depth (peg dropped in)
