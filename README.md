@@ -11,6 +11,19 @@
 
 ---
 
+## Demo
+
+<table>
+  <tr>
+    <td align="center"><b>Detect → grasp → force-regulated insertion on the Franka Panda</b></td>
+  </tr>
+  <tr>
+    <td><img src="demo.gif" width="640"/></td>
+  </tr>
+</table>
+
+---
+
 ## 🏆 Built at the Europe Embodied Hackathon 2026
 
 This project — by **Team `manipulatoren`** — was built in **48 hours** at the
