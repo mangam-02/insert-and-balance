@@ -119,14 +119,19 @@ ChArUco board is photographed at each, and `cv2.calibrateHandEye` solves for the
 camera pose relative to the flange. A companion RealSense **intrinsics** calibration
 lives at the repo root (`calibrate_intrinsics.py`, `charuco_board.png`).
 
-### 3 · Grasp — top-down, with a tip-up recovery
+### 3 · Grasp — top-down, with an experimental tip-up recovery
 
 The grasp is a fixed top-down transform on the detected peg (all offsets are
 parameters). Before grasping, the node **classifies the peg orientation**: it
 rotates the peg's long axis into the base frame and measures its tilt from vertical.
-If the peg is **lying on its side**, a **tip-up maneuver** grasps it tilted, lifts it
-clear of the table, rotates it upright, sets it back down, and re-detects — so a
-fallen peg is recovered automatically instead of aborting.
+If the peg is **lying on its side**, an experimental **tip-up maneuver** grasps it
+tilted, lifts it clear of the table, rotates it upright, sets it back down, and
+re-detects, aiming to recover a fallen peg instead of aborting.
+
+> ⚠️ **Work in progress.** The tip-up recovery is implemented and steps through in
+> RViz, but it was **not fully reliable by the end of the hackathon** — the tilted
+> grasp and stand-up orientation still need tuning on the robot. The main grasp +
+> force-regulated insertion path (upright peg) is the part that works.
 
 ### 4 · Insertion — force-regulated impedance + spiral search
 
@@ -149,7 +154,7 @@ retracts and returns home.
 
 - **Learned 6D pose** (FoundationPose) for peg *and* socket — fiducial-free, CAD-driven
 - **Eye-in-hand hand-eye calibration** (ChArUco + `cv2.calibrateHandEye`) and RealSense intrinsics
-- **Peg orientation classification** and automatic **tip-up regrasp** for a fallen peg
+- **Peg orientation classification** and an experimental **tip-up regrasp** for a fallen peg *(work in progress — not fully reliable yet)*
 - **Cartesian-impedance force regulation** on the insertion axis with a hard over-force safety cap
 - **Archimedean spiral search** that finds the hole on surface contact, ending by descent depth
 - **MoveIt free-space motion** (Pilz PTP joint moves, Cartesian straight-line paths) with no `moveit_py` dependency
@@ -254,7 +259,7 @@ ros2 action send_goal /panda_gripper/move   franka_msgs/action/Move "{width: 0.0
 | Free-space motion | MoveIt / Pilz **PTP** | Planned, limit-aware, no steady-state error for large moves |
 | Insertion | Cartesian impedance, soft Z stiffness | Compliant contact; gentle regulated force into the hole |
 | Hole search | Archimedean spiral, ends by descent depth | Recovers when the peg lands on the surface, not the hole |
-| Fallen peg | Orientation classification + tip-up regrasp | Stands a lying peg upright automatically before grasping |
+| Fallen peg | Orientation classification + tip-up regrasp *(WIP)* | Aims to stand a lying peg upright before grasping — not yet fully reliable |
 | Safety | Hard `|F|` cap + `error_recovery` | Reflexes stay loose enough not to trip mid-insertion |
 | Structure | One sequential node, all params | Readable top-to-bottom; fast to tune on hardware |
 
